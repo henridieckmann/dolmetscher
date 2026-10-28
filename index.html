@@ -1,0 +1,644 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Dolmetscher">
+<meta name="theme-color" content="#1b1a17">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<title>Dolmetscher</title>
+<style>
+:root{
+  --paper:#f5f1ea; --paper2:#ece6db; --ink:#1b1a17; --muted:#6f6a61; --line:#d9d1c3;
+  --it:#c4552d; --it-soft:#f3dfd4; --de:#1f4e79; --de-soft:#d9e4ef;
+  --bar:#1b1a17; --bar-ink:#f5f1ea; --rec:#d62f2f; --ok:#2f8f4e;
+  --fs:1.55rem;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --paper:#141311; --paper2:#1e1c19; --ink:#f3efe8; --muted:#a29b8f; --line:#34302a;
+    --it:#e2774f; --it-soft:#3a241b; --de:#6fa3d6; --de-soft:#1a2a3a; --bar:#000; --bar-ink:#f3efe8; }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--paper);color:var(--ink);
+  font-family:ui-rounded,-apple-system,BlinkMacSystemFont,"SF Pro Rounded","Segoe UI",system-ui,sans-serif;
+  overscroll-behavior:none;}
+body{position:fixed;inset:0;overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+#app{position:absolute;inset:0;display:flex;flex-direction:column}
+.half{flex:1 1 0;min-height:0;display:flex;flex-direction:column;padding:12px 16px 14px;position:relative}
+.half.top{transform:rotate(180deg);padding-bottom:calc(14px + env(safe-area-inset-top))}
+.half.bottom{padding-bottom:calc(14px + env(safe-area-inset-bottom))}
+.half[data-lang=it]{--acc:var(--it);--acc-soft:var(--it-soft)}
+.half[data-lang=de]{--acc:var(--de);--acc-soft:var(--de-soft)}
+.log{flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;gap:10px;padding:4px 2px 10px;scroll-behavior:smooth}
+.log::before{content:"";flex:1 1 auto}
+.empty{color:var(--muted);font-size:1.15rem;line-height:1.4;text-align:center;padding:0 12px;margin:auto 0}
+.empty b{color:var(--acc)}
+.msg{max-width:92%;border-radius:18px;padding:10px 14px;line-height:1.28;word-wrap:break-word}
+.msg.theirs{align-self:flex-start;background:var(--acc-soft);font-size:var(--fs);font-weight:600}
+.msg.mine{align-self:flex-end;background:transparent;border:1.5px solid var(--line);color:var(--muted);font-size:calc(var(--fs)*.68)}
+.msg .sub{display:block;font-size:.62em;font-weight:400;color:var(--muted);margin-top:4px}
+.msg.pending .txt:empty::after{content:"…";opacity:.6}
+.msg.theirs:active{filter:brightness(.95)}
+.ctrl{flex:0 0 auto;display:flex;flex-direction:column;gap:6px;align-items:stretch}
+.talk{position:relative;height:clamp(64px,11vh,96px);border-radius:999px;background:var(--acc);color:#fff;
+  display:flex;align-items:center;justify-content:center;gap:12px;font-size:1.35rem;font-weight:700;letter-spacing:.01em;
+  touch-action:none;box-shadow:0 2px 0 rgba(0,0,0,.15);transition:transform .08s, background .15s}
+.talk .flag{font-size:1.7rem;line-height:1}
+.talk.pressed{transform:scale(.97)}
+.talk.connecting{opacity:.75}
+.talk.live{background:var(--rec)}
+.talk.live::after{content:"";position:absolute;inset:-6px;border-radius:999px;border:3px solid var(--rec);animation:pulse 1.1s ease-out infinite}
+@keyframes pulse{from{opacity:.9;transform:scale(1)}to{opacity:0;transform:scale(1.08)}}
+.hint{font-size:.85rem;color:var(--muted);text-align:center;min-height:1.1em}
+.bar{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bar);color:var(--bar-ink);font-size:.85rem}
+.bar .st{flex:1;display:flex;align-items:center;gap:10px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dot{width:9px;height:9px;border-radius:50%;background:#666;flex:0 0 auto}
+.dot.connected{background:#3cc46b}.dot.connecting{background:#e6b422}.dot.error{background:var(--rec)}
+.bar .ico{width:38px;height:34px;border-radius:10px;display:grid;place-items:center;background:rgba(255,255,255,.08)}
+.bar svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.overlay{position:absolute;inset:0;background:var(--paper);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 20px calc(24px + env(safe-area-inset-bottom));text-align:center;z-index:20;overflow-y:auto}
+.overlay[hidden],.sheet[hidden]{display:none}
+.overlay h1{font-size:2rem;margin:0 0 6px}
+.overlay p{color:var(--muted);line-height:1.45;max-width:30rem;margin:6px 0}
+.flags{font-size:3rem;margin-bottom:10px}
+.big{margin-top:22px;width:min(100%,22rem);height:62px;border-radius:999px;background:var(--ink);color:var(--paper);font-weight:700;font-size:1.15rem}
+.big:disabled{opacity:.5}
+.ghost{margin-top:10px;color:var(--muted);text-decoration:underline;font-size:.95rem;padding:8px}
+input[type=password],input[type=text]{width:min(100%,22rem);margin-top:16px;padding:14px 16px;border-radius:14px;border:1.5px solid var(--line);background:var(--paper2);color:var(--ink);font-size:1rem;-webkit-user-select:text;user-select:text}
+.sheet{position:absolute;inset:0;z-index:30;background:rgba(0,0,0,.35);display:flex;align-items:flex-end}
+.sheet .panel{width:100%;max-height:88%;overflow-y:auto;background:var(--paper);border-radius:22px 22px 0 0;padding:18px 18px calc(20px + env(safe-area-inset-bottom))}
+.panel h2{margin:0 0 12px;font-size:1.3rem;display:flex;justify-content:space-between;align-items:center}
+.row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+.row label{font-weight:600}
+.row small{display:block;color:var(--muted);font-weight:400;margin-top:2px}
+.seg{display:flex;background:var(--paper2);border-radius:10px;padding:3px}
+.seg button{white-space:nowrap;padding:7px 10px;border-radius:8px;font-size:.9rem;color:var(--muted)}
+.seg button.on{background:var(--ink);color:var(--paper)}
+.btn{padding:10px 14px;border-radius:12px;background:var(--paper2);font-weight:600}
+.btn.danger{color:var(--rec)}
+.note{color:var(--muted);font-size:.85rem;line-height:1.45;margin:14px 0 0}
+#diag{font-family:ui-monospace,Menlo,monospace;font-size:.7rem;white-space:pre-wrap;background:var(--paper2);border-radius:10px;padding:10px;max-height:30vh;overflow:auto;margin-top:8px;-webkit-user-select:text;user-select:text}
+#toast{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:40;background:var(--ink);color:var(--paper);padding:12px 16px;border-radius:14px;max-width:86%;font-size:.95rem;line-height:1.35;text-align:center;opacity:0;pointer-events:none;transition:opacity .2s}
+#toast.show{opacity:.96}
+body.fs-m{--fs:1.3rem} body.fs-l{--fs:1.55rem} body.fs-xl{--fs:1.9rem}
+</style>
+</head>
+<body class="fs-l">
+<div id="app">
+  <section class="half top" data-lang="it">
+    <div class="log" id="log-it"><div class="empty">Tenga premuto <b>🇮🇹 Parla</b> e parli in italiano.<br>Io sentirò la traduzione in tedesco.</div></div>
+    <div class="ctrl">
+      <button class="talk" id="btn-it" data-sp="it" aria-label="Parla"><span class="flag">🇮🇹</span><span class="lbl">Parla</span></button>
+      <div class="hint" id="hint-it">Tenga premuto · oppure tocchi una volta</div>
+    </div>
+  </section>
+  <div class="bar">
+    <div class="st"><span class="dot" id="dot"></span><span id="status">Bereit</span><span id="cost" style="opacity:.6"></span></div>
+    <button class="ico" id="b-clear" aria-label="Verlauf leeren"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button>
+    <button class="ico" id="b-settings" aria-label="Einstellungen"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+  </div>
+  <section class="half bottom" data-lang="de">
+    <div class="log" id="log-de"><div class="empty">Halte <b>🇩🇪 Sprechen</b> gedrückt und sprich Deutsch.<br>Dein Gegenüber hört Italienisch.</div></div>
+    <div class="ctrl">
+      <button class="talk" id="btn-de" data-sp="de" aria-label="Sprechen"><span class="flag">🇩🇪</span><span class="lbl">Sprechen</span></button>
+      <div class="hint" id="hint-de">Gedrückt halten · oder einmal tippen</div>
+    </div>
+  </section>
+</div>
+
+<div class="overlay" id="setup" hidden>
+  <div class="flags">🇩🇪 ⇄ 🇮🇹</div>
+  <h1>Dolmetscher</h1>
+  <p>Füge einmalig deinen <b>OpenAI-API-Key</b> ein. Er wird nur auf diesem iPhone gespeichert und direkt an OpenAI geschickt.</p>
+  <input type="password" id="key" placeholder="sk-…" autocomplete="off" autocapitalize="off" spellcheck="false">
+  <button class="big" id="b-savekey">Speichern &amp; testen</button>
+  <p id="setup-msg" class="note"></p>
+</div>
+
+<div class="overlay" id="start" hidden>
+  <div class="flags">🇩🇪 ⇄ 🇮🇹</div>
+  <h1 id="start-title">Dolmetscher</h1>
+  <p id="start-text">Leg das Handy zwischen euch. Die obere Hälfte ist für dein Gegenüber.</p>
+  <button class="big" id="b-start">Gespräch starten</button>
+</div>
+
+<div class="sheet" id="settings" hidden>
+  <div class="panel">
+    <h2>Einstellungen <button class="btn" id="b-close">Fertig</button></h2>
+    <div class="row"><div><label>Textgröße</label></div>
+      <div class="seg" id="seg-fs"><button data-v="m">M</button><button data-v="l">L</button><button data-v="xl">XL</button></div></div>
+    <div class="row"><div><label>Mikrofon</label><small>Wo liegt das Handy meistens?</small></div>
+      <div class="seg" id="seg-nr"><button data-v="far_field">Tisch</button><button data-v="near_field">Hand</button></div></div>
+    <div class="row"><div><label>Originaltext zeigen</label><small>Kleiner Text unter der Übersetzung</small></div>
+      <div class="seg" id="seg-src"><button data-v="1">An</button><button data-v="0">Aus</button></div></div>
+    <div class="row"><div><label>Pause nach</label><small>Verbindung schläft ein, wenn niemand spricht (spart Kosten)</small></div>
+      <div class="seg" id="seg-idle"><button data-v="45">45 s</button><button data-v="90">90 s</button><button data-v="300">5 min</button></div></div>
+    <div class="row"><div><label>Kosten (Schätzung)</label><small id="cost-detail">–</small></div>
+      <button class="btn" id="b-test">Verbindung testen</button></div>
+    <div class="row"><div><label>API-Key</label><small id="key-mask">–</small></div>
+      <button class="btn danger" id="b-forget">Ändern</button></div>
+    <p class="note">Tipp: Antippen einer Übersetzung liest sie noch einmal vor (iPhone-Stimme).<br>
+      Ohne Internet: Apples App „Übersetzen“ → Sprachen Deutsch &amp; Italienisch laden → Modus „Unterhaltung“.</p>
+    <details style="margin-top:12px"><summary class="note" style="display:inline">Diagnose</summary>
+      <div id="diag"></div>
+      <button class="btn" id="b-copydiag" style="margin-top:8px">Diagnose kopieren</button></details>
+    <p class="note" id="ver"></p>
+  </div>
+</div>
+<div id="toast" role="status"></div>
+
+<script>
+'use strict';
+const VERSION = '1.0.0';
+const MODEL = 'gpt-realtime-translate';
+const STT_MODEL = 'gpt-realtime-whisper';
+const PRICE_PER_MIN = 0.034;
+const LS = {
+  get(k, d){ try{ const v = localStorage.getItem('dm.'+k); return v===null ? d : v; }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem('dm.'+k, v); }catch(e){} },
+  del(k){ try{ localStorage.removeItem('dm.'+k); }catch(e){} }
+};
+const API = () => (LS.get('apiBase', 'https://api.openai.com')).replace(/\/$/, '');
+const $ = id => document.getElementById(id);
+
+/* ---------- Diagnose ---------- */
+const diagLines = [];
+function diag(...a){
+  const line = new Date().toISOString().slice(11,23) + ' ' + a.map(x => typeof x === 'string' ? x : JSON.stringify(x)).join(' ');
+  diagLines.push(line.slice(0, 400)); if (diagLines.length > 300) diagLines.shift();
+  if (!$('settings').hidden) $('diag').textContent = diagLines.slice(-80).join('\n');
+}
+window.addEventListener('error', e => diag('JS-Fehler', e.message));
+window.addEventListener('unhandledrejection', e => diag('Promise-Fehler', String(e.reason && e.reason.message || e.reason)));
+
+let toastT;
+function toast(msg, ms = 3800){
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), ms);
+}
+
+/* ---------- Fehler-Übersetzung ---------- */
+async function apiError(r){
+  let j = null, txt = '';
+  try { txt = await r.text(); j = JSON.parse(txt); } catch(e){}
+  const e = j && j.error || {};
+  diag('API-Fehler', r.status, txt.slice(0, 300));
+  let msg = e.message || ('HTTP ' + r.status);
+  if (r.status === 401) msg = 'API-Key ungültig oder gelöscht. Bitte in den Einstellungen neu eintragen.';
+  else if (r.status === 429 && /quota|billing|insufficient/i.test(e.code + e.type + e.message)) msg = 'Kein Guthaben mehr auf dem OpenAI-Konto (platform.openai.com → Billing).';
+  else if (r.status === 429) msg = 'Zu viele Anfragen – kurz warten und nochmal versuchen.';
+  else if (r.status === 403 || r.status === 404) msg = 'Kein Zugriff auf das Übersetzungsmodell (' + (e.message || r.status) + ').';
+  const err = new Error(msg); err.status = r.status; err.code = e.code; return err;
+}
+
+/* ---------- Mikrofon ---------- */
+let micStream = null;
+async function ensureMic(){
+  if (micStream && micStream.getAudioTracks().some(t => t.readyState === 'live')) return micStream;
+  micStream = await navigator.mediaDevices.getUserMedia({ audio: {
+    echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
+  diag('Mikrofon an', micStream.getAudioTracks()[0].label);
+  return micStream;
+}
+function stopMic(){
+  if (micStream) micStream.getTracks().forEach(t => t.stop());
+  micStream = null;
+}
+
+/* ---------- Übersetzungs-Session (eine pro Richtung) ---------- */
+class Session {
+  constructor(speaker, target){
+    this.speaker = speaker; this.target = target;
+    this.state = 'idle'; this.pc = null; this.dc = null; this.track = null; this.connecting = null;
+    this.lastActivity = 0; this.connectedAt = 0;
+    this.audio = document.createElement('audio');
+    this.audio.autoplay = true; this.audio.setAttribute('playsinline', ''); this.audio.playsInline = true;
+    document.body.appendChild(this.audio);
+  }
+  setState(s){ this.state = s; diag('Session', this.speaker + '→' + this.target, s); App.renderStatus(); }
+  connect(){
+    if (this.state === 'connected') return Promise.resolve();
+    if (this.state === 'connecting' && this.connecting) return this.connecting;
+    this.setState('connecting');
+    this.connecting = this._connect().then(() => {
+      this.connectedAt = Date.now(); this.lastActivity = Date.now(); this.setState('connected');
+    }).catch(err => { this.close(true); this.setState(err.message === 'abgebrochen' ? 'idle' : 'error'); throw err; });
+    return this.connecting;
+  }
+  async _connect(){
+    const key = LS.get('key', '');
+    if (!key) throw new Error('Kein API-Key gespeichert.');
+    const stream = await ensureMic();
+    const pc = new RTCPeerConnection();
+    this.pc = pc;
+    const track = stream.getAudioTracks()[0].clone();
+    track.enabled = false; this.track = track;
+    pc.addTrack(track, new MediaStream([track]));
+    pc.ontrack = e => {
+      this.audio.srcObject = (e.streams && e.streams[0]) || new MediaStream([e.track]);
+      this.audio.play().catch(err => diag('Audio play blockiert', err.message));
+    };
+    pc.onconnectionstatechange = () => {
+      diag('PC', this.speaker, pc.connectionState);
+      if (this.pc === pc && (pc.connectionState === 'failed' || pc.connectionState === 'closed')) {
+        this.close(true); this.setState('idle');
+      }
+    };
+    const dc = pc.createDataChannel('oai-events'); this.dc = dc;
+    dc.onmessage = e => { let ev; try { ev = JSON.parse(e.data); } catch(x){ return; } this.onEvent(ev); };
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    const nr = LS.get('nr', 'far_field');
+    const sessionCfg = { audio: { input: { transcription: { model: STT_MODEL }, noise_reduction: { type: nr } },
+                                  output: { language: this.target } } };
+    let secret = null, direct = false;
+    try {
+      const r = await fetch(API() + '/v1/realtime/translations/client_secrets', {
+        method: 'POST', headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session: Object.assign({ model: MODEL }, sessionCfg) }) });
+      if (!r.ok) throw await apiError(r);
+      const j = await r.json();
+      secret = typeof j.client_secret === 'string' ? j.client_secret
+             : (j.client_secret && j.client_secret.value) || j.value;
+      if (!secret) { diag('Token-Antwort ohne Secret', JSON.stringify(j).slice(0, 200)); direct = true; }
+    } catch (err) {
+      if (err.status) throw err;            // echter API-Fehler -> anzeigen
+      diag('Token-Abruf fehlgeschlagen, nutze Direktmodus', err.message); direct = true;
+    }
+    if (this.pc !== pc) throw new Error('abgebrochen');
+    let r;
+    try {
+      r = await fetch(API() + '/v1/realtime/translations/calls' + (direct ? '?model=' + MODEL : ''), {
+        method: 'POST', headers: { 'Authorization': 'Bearer ' + (direct ? key : secret), 'Content-Type': 'application/sdp' },
+        body: offer.sdp });
+    } catch (err) { throw new Error('Keine Verbindung zu OpenAI – Internet prüfen.'); }
+    if (!r.ok) throw await apiError(r);
+    const answer = await r.text();
+    if (this.pc !== pc) throw new Error('abgebrochen');
+    await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+    await new Promise((res, rej) => {
+      if (dc.readyState === 'open') return res();
+      const t = setTimeout(() => rej(new Error('Zeitüberschreitung beim Verbinden.')), 12000);
+      dc.onopen = () => { clearTimeout(t); res(); };
+      dc.onclose = () => { clearTimeout(t); rej(new Error('Verbindung wurde geschlossen.')); };
+    });
+    dc.onclose = () => { if (this.dc === dc) { diag('Datenkanal zu', this.speaker); this.close(true); this.setState('idle'); } };
+    if (direct) dc.send(JSON.stringify({ type: 'session.update', session: sessionCfg }));
+  }
+  onEvent(ev){
+    const t = ev.type || '';
+    if (t.endsWith('.delta')) {
+      this.lastActivity = Date.now();
+      if (t === 'session.input_transcript.delta') App.onDelta(this.speaker, 'src', ev.delta || '');
+      else if (t === 'session.output_transcript.delta') App.onDelta(this.speaker, 'out', ev.delta || '');
+      return;
+    }
+    diag('Event', this.speaker, JSON.stringify(ev).slice(0, 300));
+    if (t === 'error') {
+      const m = (ev.error && (ev.error.message || ev.error.code)) || 'Unbekannter Fehler';
+      toast('OpenAI: ' + m);
+    }
+  }
+  setMic(on){ if (this.track) this.track.enabled = !!on; if (on) this.lastActivity = Date.now(); }
+  close(silent){
+    if (this.connectedAt) { App.addCost((Date.now() - this.connectedAt) / 60000); this.connectedAt = 0; }
+    const pc = this.pc, dc = this.dc, tr = this.track;
+    this.pc = null; this.dc = null; this.track = null; this.connecting = null;
+    try { dc && dc.close(); } catch(e){}
+    try { tr && tr.stop(); } catch(e){}
+    try { pc && pc.close(); } catch(e){}
+    this.audio.srcObject = null;
+    if (!silent) this.setState('idle');
+  }
+}
+
+/* ---------- App ---------- */
+const App = {
+  sessions: {},
+  turns: [], current: { de: null, it: null }, active: null, latched: false, pressT: 0,
+  started: false, wakeLock: null,
+
+  init(){
+    this.sessions.de = new Session('de', 'it');   // Henri spricht Deutsch -> Italienisch
+    this.sessions.it = new Session('it', 'de');   // Gegenüber spricht Italienisch -> Deutsch
+    $('ver').textContent = 'Version ' + VERSION + ' · Modell ' + MODEL;
+    diag('Start', VERSION, navigator.userAgent);
+    this.applyPrefs();
+    ['de', 'it'].forEach(sp => this.bindTalk($('btn-' + sp), sp));
+    $('b-savekey').onclick = () => this.saveKey();
+    $('key').addEventListener('keydown', e => { if (e.key === 'Enter') this.saveKey(); });
+    $('b-start').onclick = () => this.start();
+    $('b-settings').onclick = () => this.openSettings();
+    $('b-close').onclick = () => { $('settings').hidden = true; };
+    $('settings').addEventListener('click', e => { if (e.target.id === 'settings') $('settings').hidden = true; });
+    $('b-clear').onclick = () => this.clear();
+    $('b-test').onclick = () => this.test();
+    $('b-forget').onclick = () => { if (confirm('API-Key von diesem Gerät entfernen und neu eingeben?')) { LS.del('key'); this.stopAll(); $('settings').hidden = true; this.showSetup(); } };
+    $('b-copydiag').onclick = () => { navigator.clipboard && navigator.clipboard.writeText(diagLines.join('\n')).then(() => toast('Diagnose kopiert')); };
+    this.bindSeg('seg-fs', 'fs', 'l', v => { document.body.className = 'fs-' + v; });
+    this.bindSeg('seg-nr', 'nr', 'far_field', () => { this.stopAll(); });
+    this.bindSeg('seg-src', 'src', '1', () => this.renderAll());
+    this.bindSeg('seg-idle', 'idle', '90');
+    document.addEventListener('visibilitychange', () => this.onVisibility());
+    setInterval(() => this.tick(), 3000);
+    this.renderCost();
+    if (!LS.get('key', '')) this.showSetup(); else this.showStart();
+    if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+  },
+
+  applyPrefs(){ document.body.className = 'fs-' + LS.get('fs', 'l'); },
+  bindSeg(id, key, def, cb){
+    const el = $(id);
+    const paint = () => el.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === LS.get(key, def)));
+    el.querySelectorAll('button').forEach(b => b.onclick = () => { LS.set(key, b.dataset.v); paint(); cb && cb(b.dataset.v); });
+    paint();
+  },
+
+  showSetup(){ $('setup').hidden = false; $('start').hidden = true; setTimeout(() => $('key').focus(), 50); },
+  showStart(resume){
+    $('setup').hidden = true; $('start').hidden = false;
+    $('start-title').textContent = resume ? 'Pausiert' : 'Dolmetscher';
+    $('start-text').textContent = resume ? 'Tippe, um das Gespräch fortzusetzen.' : 'Leg das Handy zwischen euch. Die obere Hälfte ist für dein Gegenüber.';
+    $('b-start').textContent = resume ? 'Fortsetzen' : 'Gespräch starten';
+  },
+
+  async saveKey(){
+    const k = $('key').value.trim();
+    if (!/^sk-[\w-]{20,}$/.test(k)) { $('setup-msg').textContent = 'Das sieht nicht wie ein OpenAI-Key aus (beginnt mit „sk-“).'; return; }
+    LS.set('key', k); $('key').value = '';
+    $('setup-msg').textContent = 'Teste Verbindung … (Mikrofon erlauben)';
+    $('b-savekey').disabled = true;
+    try {
+      await this.unlockAudio();
+      const t0 = Date.now();
+      await this.sessions.de.connect();
+      $('setup-msg').textContent = '';
+      toast('Verbindung klappt (' + ((Date.now() - t0) / 1000).toFixed(1) + ' s) ✓');
+      $('setup').hidden = true; this.started = true; this.armWakeLock();
+      this.sessions.it.connect().catch(e => diag('Vorverbinden it', e.message));
+    } catch (e) {
+      $('setup-msg').textContent = 'Fehler: ' + e.message;
+      if (e.status === 401) LS.del('key');
+    } finally { $('b-savekey').disabled = false; }
+  },
+
+  unlockAudio(){
+    // iOS: Audio-Wiedergabe muss in einer Nutzeraktion freigeschaltet werden
+    // (play() ohne Quelle bleibt "pending" – daher nicht abwarten)
+    Object.values(this.sessions).forEach(s => { try { const p = s.audio.play(); p && p.catch(() => {}); } catch(e){} });
+    return Promise.resolve();
+  },
+
+  async start(){
+    $('b-start').disabled = true;
+    try {
+      await this.unlockAudio();
+      await ensureMic();
+      $('start').hidden = true; this.started = true; this.armWakeLock();
+      this.sessions.de.connect().catch(e => this.fail(e));
+      this.sessions.it.connect().catch(e => diag('Vorverbinden it', e.message));
+    } catch (e) {
+      toast(e.name === 'NotAllowedError' ? 'Mikrofon-Zugriff verweigert. iPhone-Einstellungen → Safari → Mikrofon → Erlauben.' : 'Fehler: ' + e.message, 6000);
+    } finally { $('b-start').disabled = false; }
+  },
+
+  fail(e){
+    if (e && e.message === 'abgebrochen') return;
+    toast(e.message || String(e), 6000);
+    if (e.status === 401) { this.stopAll(); this.showSetup(); }
+  },
+
+  async armWakeLock(){
+    try { if ('wakeLock' in navigator && !this.wakeLock) { this.wakeLock = await navigator.wakeLock.request('screen'); this.wakeLock.addEventListener('release', () => { this.wakeLock = null; }); } } catch(e){ diag('WakeLock', e.message); }
+  },
+
+  onVisibility(){
+    if (document.hidden) {
+      if (this.active) this.endTalk(this.active, true);
+      this.stopAll(); stopMic();
+      if (this.started && LS.get('key', '')) this.showStart(true);
+    }
+  },
+
+  stopAll(){ Object.values(this.sessions).forEach(s => s.close()); },
+
+  tick(){
+    const idleMs = parseInt(LS.get('idle', '90'), 10) * 1000;
+    const now = Date.now();
+    for (const s of Object.values(this.sessions)) {
+      if (s.state === 'connected' && this.active !== s.speaker && now - s.lastActivity > idleMs) {
+        diag('Leerlauf – trenne', s.speaker); s.close();
+      }
+    }
+    this.renderCost();
+  },
+
+  /* ---- Sprechknopf: gedrückt halten = Push-to-talk, kurz tippen = Dauer-An ---- */
+  bindTalk(btn, sp){
+    btn.addEventListener('contextmenu', e => e.preventDefault());
+    btn.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      try { btn.setPointerCapture(e.pointerId); } catch(x){}
+      btn.classList.add('pressed');
+      if (this.active === sp && this.latched) { this.latched = false; this.endTalk(sp); btn._ignoreUp = true; return; }
+      btn._ignoreUp = false;
+      this.beginTalk(sp);
+    });
+    const up = e => {
+      btn.classList.remove('pressed');
+      if (btn._ignoreUp) { btn._ignoreUp = false; return; }
+      if (this.active !== sp) return;
+      if (Date.now() - this.pressT < 350 && e.type === 'pointerup') { this.latched = true; this.renderButtons(); return; }
+      this.endTalk(sp);
+    };
+    btn.addEventListener('pointerup', up);
+    btn.addEventListener('pointercancel', up);
+  },
+
+  async beginTalk(sp){
+    if (!this.started) { this.start(); }
+    if (this.active && this.active !== sp) this.endTalk(this.active, true);
+    this.active = sp; this.latched = false; this.pressT = Date.now();
+    try { speechSynthesis.cancel(); } catch(e){}
+    Object.values(this.sessions).forEach(x => { if (x.audio.srcObject && x.audio.paused) x.audio.play().catch(() => {}); });
+    this.newTurn(sp);
+    const s = this.sessions[sp];
+    this.renderButtons();
+    try {
+      await s.connect();
+    } catch (e) {
+      if (this.active === sp) { this.active = null; this.latched = false; }
+      this.dropEmptyTurn(sp); this.renderButtons(); this.fail(e); return;
+    }
+    if (this.active === sp) s.setMic(true);
+    this.renderButtons();
+    // Gegenseite schon mal aufwecken – die Antwort kommt bestimmt
+    const other = this.sessions[sp === 'de' ? 'it' : 'de'];
+    if (other.state === 'idle' || other.state === 'error') other.connect().catch(e => diag('Vorverbinden', e.message));
+    else other.lastActivity = Date.now();
+  },
+
+  endTalk(sp, immediate){
+    const s = this.sessions[sp];
+    if (this.active === sp) { this.active = null; this.latched = false; }
+    // kurzer Nachlauf, damit das letzte Wort nicht abgeschnitten wird
+    const off = () => { if (this.active !== sp) s.setMic(false); };
+    if (immediate) off(); else setTimeout(off, 450);
+    s.lastActivity = Date.now();
+    this.renderButtons();
+    setTimeout(() => this.dropEmptyTurn(sp), 15000);
+  },
+
+  /* ---- Gesprächsverlauf ---- */
+  newTurn(sp){
+    const prev = this.current[sp];
+    if (prev && !prev.src.trim() && !prev.out.trim()) { prev.t = Date.now(); return prev; }
+    const turn = { id: Math.random().toString(36).slice(2), speaker: sp, src: '', out: '', t: Date.now() };
+    this.turns.push(turn); this.current[sp] = turn;
+    if (this.turns.length > 60) { const old = this.turns.shift(); this.removeTurnEls(old); }
+    this.renderTurn(turn);
+    return turn;
+  },
+  dropEmptyTurn(sp){
+    const t = this.current[sp];
+    if (t && !t.src.trim() && !t.out.trim() && this.active !== sp) {
+      this.turns = this.turns.filter(x => x !== t); this.removeTurnEls(t); this.current[sp] = null;
+    }
+  },
+  onDelta(sp, kind, delta){
+    let turn = this.current[sp];
+    if (!turn) turn = this.newTurn(sp);
+    turn[kind] += delta;
+    this.renderTurn(turn);
+  },
+  clear(){
+    this.turns.forEach(t => this.removeTurnEls(t)); this.turns = []; this.current = { de: null, it: null };
+    this.renderAll();
+  },
+
+  els: new Map(),
+  removeTurnEls(t){ const e = this.els.get(t.id); if (e) { e.de.remove(); e.it.remove(); this.els.delete(t.id); } },
+  renderAll(){
+    for (const t of this.turns) this.renderTurn(t);
+    ['de', 'it'].forEach(r => { const log = $('log-' + r); const em = log.querySelector('.empty'); if (em) em.style.display = this.turns.length ? 'none' : ''; });
+  },
+  renderTurn(t){
+    let e = this.els.get(t.id);
+    if (!e) {
+      e = {};
+      for (const reader of ['de', 'it']) {
+        const d = document.createElement('div');
+        d.className = 'msg pending ' + (t.speaker === reader ? 'mine' : 'theirs');
+        d.innerHTML = '<span class="txt"></span><span class="sub"></span>';
+        if (t.speaker !== reader) d.addEventListener('click', () => this.speak(t, reader));
+        const log = $('log-' + reader);
+        const em = log.querySelector('.empty'); if (em) em.style.display = 'none';
+        log.appendChild(d); e[reader] = d;
+      }
+      this.els.set(t.id, e);
+    }
+    const showSrc = LS.get('src', '1') === '1';
+    for (const reader of ['de', 'it']) {
+      const d = e[reader];
+      const mine = t.speaker === reader;
+      const main = (mine ? t.src : t.out).trim();
+      const sub = mine ? '' : (showSrc ? t.src.trim() : '');
+      d.querySelector('.txt').textContent = main;
+      d.querySelector('.sub').textContent = sub;
+      d.querySelector('.sub').style.display = sub ? '' : 'none';
+      d.classList.toggle('pending', !main);
+      const log = $('log-' + reader);
+      log.scrollTop = log.scrollHeight;
+    }
+  },
+  speak(t, reader){
+    // Wiederholen mit iPhone-Stimme (funktioniert auch offline)
+    try {
+      const u = new SpeechSynthesisUtterance(t.out.trim());
+      u.lang = reader === 'de' ? 'de-DE' : 'it-IT'; u.rate = 0.95;
+      speechSynthesis.cancel(); speechSynthesis.speak(u);
+    } catch(e){}
+  },
+
+  /* ---- Anzeige ---- */
+  renderButtons(){
+    for (const sp of ['de', 'it']) {
+      const b = $('btn-' + sp), s = this.sessions[sp], lbl = b.querySelector('.lbl'), h = $('hint-' + sp);
+      const isActive = this.active === sp;
+      const live = isActive && s.state === 'connected';
+      const conn = isActive && s.state === 'connecting';
+      b.classList.toggle('live', live); b.classList.toggle('connecting', conn);
+      const L = sp === 'de'
+        ? { idle: 'Sprechen', conn: 'Verbinde …', live: 'Ich höre zu …', h0: 'Gedrückt halten · oder einmal tippen', hl: 'Loslassen zum Beenden', hlat: 'Tippen zum Beenden' }
+        : { idle: 'Parla', conn: 'Connessione …', live: 'Sto ascoltando …', h0: 'Tenga premuto · oppure tocchi una volta', hl: 'Rilasci per terminare', hlat: 'Tocchi per terminare' };
+      lbl.textContent = live ? L.live : conn ? L.conn : L.idle;
+      h.textContent = live ? (this.latched ? L.hlat : L.hl) : L.h0;
+    }
+  },
+  renderStatus(){
+    const st = Object.values(this.sessions).map(s => s.state);
+    const dot = $('dot');
+    let cls = '', txt = 'Bereit';
+    if (st.includes('connecting')) { cls = 'connecting'; txt = 'Verbinde …'; }
+    else if (st.every(s => s === 'connected')) { cls = 'connected'; txt = 'Verbunden'; }
+    else if (st.includes('connected')) { cls = 'connected'; txt = 'Teilweise verbunden'; }
+    else if (st.includes('error')) { cls = 'error'; txt = 'Getrennt – Knopf drücken'; }
+    else { txt = this.started ? 'Pause – Knopf drücken' : 'Bereit'; }
+    dot.className = 'dot ' + cls; $('status').textContent = txt;
+    this.renderButtons();
+  },
+
+  /* ---- Kosten ---- */
+  addCost(min){
+    const day = new Date().toISOString().slice(0, 10);
+    if (LS.get('costDay', '') !== day) { LS.set('costDay', day); LS.set('costToday', '0'); }
+    LS.set('costToday', String(parseFloat(LS.get('costToday', '0')) + min * PRICE_PER_MIN));
+    LS.set('costTotal', String(parseFloat(LS.get('costTotal', '0')) + min * PRICE_PER_MIN));
+    this.renderCost();
+  },
+  liveCost(){
+    let m = 0; for (const s of Object.values(this.sessions)) if (s.connectedAt) m += (Date.now() - s.connectedAt) / 60000;
+    return m * PRICE_PER_MIN;
+  },
+  renderCost(){
+    const day = new Date().toISOString().slice(0, 10);
+    const today = (LS.get('costDay', '') === day ? parseFloat(LS.get('costToday', '0')) : 0) + this.liveCost();
+    const total = parseFloat(LS.get('costTotal', '0')) + this.liveCost();
+    const f = v => v.toFixed(2).replace('.', ',') + ' $';
+    $('cost').textContent = '· heute ≈ ' + f(today);
+    $('cost-detail').textContent = 'Heute ≈ ' + f(today) + ' · gesamt ≈ ' + f(total) + ' (Verbindungszeit × 0,034 $/min)';
+  },
+
+  openSettings(){
+    const k = LS.get('key', '');
+    $('key-mask').textContent = k ? k.slice(0, 7) + '…' + k.slice(-4) : 'nicht gesetzt';
+    $('diag').textContent = diagLines.slice(-80).join('\n') || 'Noch keine Einträge.';
+    this.renderCost();
+    $('settings').hidden = false;
+  },
+  async test(){
+    const b = $('b-test'); b.disabled = true; b.textContent = 'Teste …';
+    try {
+      await this.unlockAudio();
+      const s = this.sessions.de; const t0 = Date.now();
+      if (s.state === 'connected') s.close();
+      await s.connect();
+      toast('Verbindung klappt (' + ((Date.now() - t0) / 1000).toFixed(1) + ' s) ✓');
+      this.started = true;
+    } catch (e) { toast('Fehler: ' + e.message, 6000); }
+    finally { b.disabled = false; b.textContent = 'Verbindung testen'; }
+  }
+};
+App.init();
+</script>
+</body>
+</html>
